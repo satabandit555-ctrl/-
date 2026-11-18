@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>เกมต่อบล็อก - Neon Block Stacker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ตั้งค่าฟอนต์หลักภาษาไทยและป้องกันการเลื่อนหน้าจอขณะเล่นบนมือถือ */
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #090d16;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(56, 189, 248, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.08), transparent 25%);
+            color: #f8fafc;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow-x: hidden;
+        }
+
+        /* กรอบเรืองแสงสไตล์นีออนอาเขต */
+        .neon-border {
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.25), inset 0 0 15px rgba(56, 189, 248, 0.1);
+            border: 2px solid rgba(56, 189, 248, 0.5);
+        }
+
+        .neon-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .neon-text-cyan {
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.7);
+        }
+
+        .neon-text-pink {
+            text-shadow: 0 0 12px rgba(244, 63, 94, 0.8);
+        }
+
+        /* เอฟเฟกต์ปุ่มกดบนหน้าจอ */
+        .arcade-btn {
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            box-shadow: 0 4px 0 #020617, 0 0 10px rgba(56, 189, 248, 0.15);
+            transition: all 0.08s ease;
+        }
+
+        .arcade-btn:active, .arcade-btn.pressed {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #020617, 0 0 15px rgba(56, 189, 248, 0.4);
+            border-color: #38bdf8;
+            background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+        }
+
+        .arcade-btn-primary {
+            background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+            border: 1px solid #67e8f9;
+            box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+        }
+
+        .arcade-btn-primary:hover {
+            filter: brightness(1.1);
+            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.6);
+        }
+
+        .arcade-btn-primary:active {
+            transform: translateY(2px);
+        }
+
+        /* การสั่นของกระดานเมื่อทำลายแถวหรือวางบล็อกแรง */
+        @keyframes boardShake {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(-3px, 2px); }
+            50% { transform: translate(3px, -2px); }
+            75% { transform: translate(-2px, -1px); }
+        }
+        .shake {
+            animation: boardShake 0.22s ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4">
+
+    <!-- ส่วนหัวเกม -->
+    <header class="w-full max-w-2xl flex items-center justify-between mb-2 sm:mb-4 px-2">
+        <div class="flex items-center gap-2 sm:gap-3">
+            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-extrabold tracking-wide bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent neon-text-cyan">
+                    เกมต่อบล็อก
+                </h1>
+                <p class="text-[10px] sm:text-xs text-slate-400 hidden sm:block">NEON ARCADE BLOCK STACKER</p>
+            </div>
+        </div>
+
+        <!-- ปุ่มควบคุมเสียงและหยุดชั่วคราวด้านบน -->
+        <div class="flex items-center gap-2">
+            <button id="muteBtn" class="arcade-btn p-2 sm:px-3 sm:py-2 rounded-xl text-slate-200 flex items-center gap-1.5 text-xs sm:text-sm font-semibold" title="เปิด/ปิดเสียง">
+                <span id="soundIconOn">
+                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                    </svg>
+                </span>
+                <span id="soundIconOff" class="hidden">
+                    <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                    </svg>
+                </span>
+                <span class="hidden sm:inline" id="soundText">เสียง: เปิด</span>
+            </button>
+
+            <button id="pauseTopBtn" class="arcade-btn px-3 py-2 rounded-xl text-amber-300 font-semibold text-xs sm:text-sm flex items-center gap-1.5 disabled:opacity-40" disabled>
+                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                </svg>
+                <span id="pauseBtnLabel">หยุดชั่วคราว</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- พื้นที่เล่นเกมหลัก -->
+    <main class="w-full max-w-2xl flex flex-col sm:flex-row items-center sm:items-start justify-center gap-3 sm:gap-5">
+        
+        <!-- แถบสถิติด้านบนสำหรับมือถือ (แสดงเฉพาะจอเล็ก) -->
+        <div class="w-full grid grid-cols-4 gap-1.5 sm:hidden px-1">
+            <div class="neon-panel rounded-xl p-1.5 text-center">
+                <div class="text-[10px] text-slate-400">คะแนน</div>
+                <div id="mobileScore" class="text-sm font-bold text-cyan-400 truncate">0</div>
+            </div>
+            <div class="neon-panel rounded-xl p-1.5 text-center">
+                <div class="text-[10px] text-slate-400">สูงสุด</div>
+                <div id="mobileHighScore" class="text-sm font-bold text-amber-400 truncate">0</div>
+            </div>
+            <div class="neon-panel rounded-xl p-1.5 text-center">
+                <div class="text-[10px] text-slate-400">เลเวล / แถว</div>
+                <div class="text-sm font-bold text-purple-400"><span id="mobileLevel">1</span> / <span id="mobileLines">0</span></div>
+            </div>
+            <div class="neon-panel rounded-xl p-1 flex flex-col items-center justify-center">
+                <div class="text-[10px] text-slate-400 leading-none mb-0.5">ตัวถัดไป</div>
+                <canvas id="mobileNextCanvas" width="60" height="36" class="block"></canvas>
+            </div>
+        </div>
+
+        <!-- กระดานเกมหลัก (Canvas 10x20) -->
+        <div id="boardContainer" class="relative rounded-2xl overflow-hidden neon-border bg-slate-950/90 flex-shrink-0">
+            <canvas id="gameCanvas" class="block"></canvas>
+
+            <!-- หน้าจอซ้อนทับ: เริ่มเกม / หยุดชั่วคราว / จบเกม -->
+            <div id="overlayScreen" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-5 text-center z-10 transition-opacity duration-200">
+                <!-- สถานะเริ่มต้น -->
+                <div id="startView" class="flex flex-col items-center">
+                    <div class="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center mb-4 shadow-lg shadow-cyan-500/20">
+                        <svg class="w-9 h-9 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-white mb-1">พร้อมลุยหรือยัง?</h2>
+                    <p class="text-xs sm:text-sm text-slate-300 mb-6 max-w-[220px]">เรียงบล็อกให้เต็มแถวเพื่อทำคะแนนและอัปเลเวลความเร็ว!</p>
+                    <button id="startBtn" class="arcade-btn-primary px-8 py-3.5 rounded-xl font-bold text-white text-base sm:text-lg tracking-wide cursor-pointer">
+                        เริ่มเกม
+                    </button>
+                </div>
+
+                <!-- สถานะหยุดชั่วคราว -->
+                <div id="pauseView" class="hidden flex-col items-center">
+                    <div class="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-400/40 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-amber-300 mb-1">หยุดชั่วคราว</h2>
+                    <p class="text-xs text-slate-300 mb-6">กดปุ่มด้านล่างหรือกด P เพื่อเล่นต่อ</p>
+                    <button id="resumeBtn" class="arcade-btn-primary px-8 py-3 rounded-xl font-bold text-white text-base cursor-pointer">
+                        เล่นต่อ
+                    </button>
+                </div>
+
+                <!-- สถานะจบเกม -->
+                <div id="gameOverView" class="hidden flex-col items-center">
+                    <div class="text-rose-400 font-extrabold text-2xl sm:text-3xl mb-1 neon-text-pink">จบเกม!</div>
+                    <p class="text-xs text-slate-400 mb-4">บล็อกล้นกระดานแล้ว</p>
+                    
+                    <div class="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl p-3 mb-5 space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-400">คะแนนที่ได้:</span>
+                            <span id="finalScore" class="font-bold text-cyan-400">0</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-400">คะแนนสูงสุด:</span>
+                            <span id="finalHighScore" class="font-bold text-amber-400">0</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-400">แถวที่ทำลาย:</span>
+                            <span id="finalLines" class="font-bold text-purple-400">0</span>
+                        </div>
+                    </div>
+
+                    <button id="restartBtn" class="arcade-btn-primary px-7 py-3 rounded-xl font-bold text-white text-base cursor-pointer">
+                        เล่นอีกครั้ง
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- แผงข้อมูลด้านข้าง (แสดงบนแท็บเล็ต/เดสก์ท็อป) -->
+        <aside class="hidden sm:flex flex-col gap-3.5 w-48">
+            <!-- บล็อกตัวถัดไป -->
+            <div class="neon-panel rounded-2xl p-4 flex flex-col items-center">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">ตัวถัดไป</span>
+                <div class="w-28 h-24 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-center">
+                    <canvas id="nextCanvas" width="100" height="80"></canvas>
+                </div>
+            </div>
+
+            <!-- คะแนนและสถิติ -->
+            <div class="neon-panel rounded-2xl p-4 space-y-3">
+                <div>
+                    <div class="text-xs text-slate-400">คะแนน</div>
+                    <div id="desktopScore" class="text-2xl font-extrabold text-cyan-400 neon-text-cyan">0</div>
+                </div>
+                <div class="h-px bg-slate-800"></div>
+                <div>
+                    <div class="text-xs text-slate-400 flex items-center gap-1">
+                        <span>คะแนนสูงสุด</span>
+                        <span class="text-amber-400">★</span>
+                    </div>
+                    <div id="desktopHighScore" class="text-lg font-bold text-amber-400">0</div>
+                </div>
+                <div class="h-px bg-slate-800"></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <div class="text-xs text-slate-400">เลเวล</div>
+                        <div id="desktopLevel" class="text-xl font-bold text-purple-400">1</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400">แถว</div>
+                        <div id="desktopLines" class="text-xl font-bold text-emerald-400">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- คู่มือปุ่มคีย์บอร์ด -->
+            <div class="neon-panel rounded-2xl p-3.5 text-xs text-slate-300 space-y-1.5">
+                <div class="font-semibold text-slate-200 mb-1">การควบคุม (คีย์บอร์ด)</div>
+                <div class="flex justify-between"><span class="text-slate-400">ซ้าย / ขวา</span><span class="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-cyan-300">← / →</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">หมุนบล็อก</span><span class="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-cyan-300">↑</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">เลื่อนลงเร็ว</span><span class="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-cyan-300">↓</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">วางทันที</span><span class="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-cyan-300">Space</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">หยุดชั่วคราว</span><span class="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-cyan-300">P</span></div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- ปุ่มควบคุมบนหน้าจอ (Touch / Mouse Controls) -->
+    <section class="w-full max-w-md mt-3 sm:mt-4 px-2">
+        <div class="grid grid-cols-5 gap-2">
+            <!-- ซ้าย -->
+            <button id="btnLeft" class="arcade-btn rounded-2xl py-3.5 sm:py-3 flex flex-col items-center justify-center text-cyan-300 active:text-white" aria-label="เลื่อนซ้าย">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                </svg>
+                <span class="text-[10px] text-slate-400 mt-0.5">ซ้าย</span>
+            </button>
+
+            <!-- ลงเร็ว (Soft Drop) -->
+            <button id="btnDown" class="arcade-btn rounded-2xl py-3.5 sm:py-3 flex flex-col items-center justify-center text-cyan-300 active:text-white" aria-label="เลื่อนลง">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+                <span class="text-[10px] text-slate-400 mt-0.5">ลง</span>
+            </button>
+
+            <!-- ขวา -->
+            <button id="btnRight" class="arcade-btn rounded-2xl py-3.5 sm:py-3 flex flex-col items-center justify-center text-cyan-300 active:text-white" aria-label="เลื่อนขวา">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                </svg>
+                <span class="text-[10px] text-slate-400 mt-0.5">ขวา</span>
+            </button>
+
+            <!-- หมุนบล็อก -->
+            <button id="btnRotate" class="arcade-btn rounded-2xl py-3.5 sm:py-3 flex flex-col items-center justify-center text-purple-300 active:text-white" aria-label="หมุนบล็อก">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span class="text-[10px] text-slate-400 mt-0.5">หมุน</span>
+            </button>
+
+            <!-- วางทันที (Hard Drop) -->
+            <button id="btnDrop" class="arcade-btn rounded-2xl py-3.5 sm:py-3 flex flex-col items-center justify-center text-amber-300 active:text-white" aria-label="วางทันที">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 13l-7 7-7-7m14-8l-7 7-7-7"/>
+                </svg>
+                <span class="text-[10px] text-slate-400 mt-0.5">วางทันที</span>
+            </button>
+        </div>
+    </section>
+
+    <script>
+        /**
+         * ระบบเสียงสังเคราะห์ด้วย Web Audio API (ไม่ต้องใช้ไฟล์เสียงภายนอก)
+         */
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            playTone(freq, type, duration, vol = 0.12, slideFreq = null) {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    if (slideFreq) {
+                        osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+                    }
+
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {
+                    // ป้องกันข้อผิดพลาดหากเบราว์เซอร์บล็อกเสียงก่อนการโต้ตอบ
+                }
+            }
+
+            move() {
+                this.playTone(260, 'triangle', 0.05, 0.08);
+            }
+
+            rotate() {
+                this.playTone(420, 'sine', 0.08, 0.12, 620);
+            }
+
+            softDrop() {
+                this.playTone(180, 'sine', 0.04, 0.06);
+            }
+
+            hardDrop() {
+                this.playTone(160, 'square', 0.12, 0.14, 55);
+            }
+
+            lock() {
+                this.playTone(130, 'triangle', 0.09, 0.12);
+            }
+
+            clearLine(count) {
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                const steps = Math.min(count, 4);
+                for (let i = 0; i < steps; i++) {
+                    setTimeout(() => {
+                        this.playTone(notes[i], 'triangle', 0.18, 0.16);
+                    }, i * 65);
+                }
+            }
+
+            levelUp() {
+                const fanfare = [440, 554.37, 659.25, 880];
+                fanfare.forEach((f, idx) => {
+                    setTimeout(() => this.playTone(f, 'sine', 0.15, 0.15), idx * 80);
+                });
+            }
+
+            gameOver() {
+                const tones = [330, 293.66, 261.63, 196];
+                tones.forEach((f, idx) => {
+                    setTimeout(() => this.playTone(f, 'sawtooth', 0.25, 0.14), idx * 140);
+                });
+            }
+        }
+
+        const sfx = new SoundEffects();
+
+        /**
+         * ค่าคงที่และรูปทรงบล็อกทั้ง 7 แบบ (Tetrominoes)
+         */
+        const COLS = 10;
+        const ROWS = 20;
+        const STORAGE_KEY = 'neon_tetris_thai_highscore';
+
+        const SHAPES = {
+            I: {
+                matrix: [
+                    [0, 0, 0, 0],
+                    [1, 1, 1, 1],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0]
+                ],
+                color: '#06b6d4', // Cyan
+                glow: 'rgba(6, 182, 212, 0.65)'
+            },
+            J: {
+                matrix: [
+                    [1, 0, 0],
+                    [1, 1, 1],
+                    [0, 0, 0]
+                ],
+                color: '#3b82f6', // Blue
+                glow: 'rgba(59, 130, 246, 0.65)'
+            },
+            L: {
+                matrix: [
+                    [0, 0, 1],
+                    [1, 1, 1],
+                    [0, 0, 0]
+                ],
+                color: '#f97316', // Orange
+                glow: 'rgba(249, 115, 22, 0.65)'
+            },
+            O: {
+                matrix: [
+                    [1, 1],
+                    [1, 1]
+                ],
+                color: '#eab308', // Yellow
+                glow: 'rgba(234, 179, 8, 0.65)'
+            },
+            S: {
+                matrix: [
+                    [0, 1, 1],
+                    [1, 1, 0],
+                    [0, 0, 0]
+                ],
+                color: '#10b981', // Emerald
+                glow: 'rgba(16, 185, 129, 0.65)'
+            },
+            T: {
+                matrix: [
+                    [0, 1, 0],
+                    [1, 1, 1],
+                    [0, 0, 0]
+                ],
+                color: '#a855f7', // Purple
+                glow: 'rgba(168, 85, 247, 0.65)'
+            },
+            Z: {
+                matrix: [
+                    [1, 1, 0],
+                    [0, 1, 1],
+                    [0, 0, 0]
+                ],
+                color: '#f43f5e', // Rose
+                glow: 'rgba(244, 63, 94, 0.65)'
+            }
+        };
+
+        const PIECE_KEYS = Object.keys(SHAPES);
+
+        /**
+         * ตัวแปรสถานะของเกม
+         */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const nextCanvas = document.getElementById('nextCanvas');
+        const nextCtx = nextCanvas.getContext('2d');
+        const mobileNextCanvas = document.getElementById('mobileNextCanvas');
+        const mobileNextCtx = mobileNextCanvas.getContext('2d');
+
+        let blockSize = 28;
+        let board = createEmptyBoard();
+        let currentPiece = null;
+        let nextPiece = null;
+        let bag = [];
+
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
+        let lines = 0;
+        let level = 1;
+
+        let isRunning = false;
+        let isPaused = false;
+        let isGameOver = false;
+
+        let dropCounter = 0;
+        let dropInterval = 1000;
+        let lastTime = 0;
+        let animationFrameId = null;
+
+        // ระบบเอฟเฟกต์ทำลายแถวและอนุภาคแสง (Particles)
+        let clearingRows = [];
+        let clearAnimTimer = 0;
+        const CLEAR_ANIM_DURATION = 240; // มิลลิวินาที
+        let particles = [];
+        let floatingTexts = [];
+
+        /**
+         * ปรับขนาด Canvas ให้พอดีกับหน้าจอทุกอุปกรณ์อย่างคมชัด
+         */
+        function resizeCanvas() {
+            const isMobile = window.innerWidth < 640;
+            const availableHeight = isMobile 
+                ? window.innerHeight - 235 
+                : window.innerHeight - 130;
+            const availableWidth = isMobile 
+                ? window.innerWidth - 32 
+                : 320;
+
+            const sizeByHeight = Math.floor(availableHeight / ROWS);
+            const sizeByWidth = Math.floor(availableWidth / COLS);
+            blockSize = Math.max(18, Math.min(sizeByHeight, sizeByWidth, 32));
+
+            canvas.width = COLS * blockSize;
+            canvas.height = ROWS * blockSize;
+
+            draw();
+            drawNextPiece();
+        }
+
+        function createEmptyBoard() {
+            return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+        }
+
+        /**
+         * ระบบสุ่มบล็อกแบบ 7-Bag (ยุติธรรม ไม่สุ่มได้ตัวเดิมซ้ำติดกันนานเกินไป)
+         */
+        function getNextFromBag() {
+            if (bag.length === 0) {
+                bag = [...PIECE_KEYS];
+                for (let i = bag.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [bag[i], bag[j]] = [bag[j], bag[i]];
+                }
+            }
+            const type = bag.pop();
+            const shapeData = SHAPES[type];
+            return {
+                type,
+                matrix: shapeData.matrix.map(row => [...row]),
+                color: shapeData.color,
+                glow: shapeData.glow,
+                x: Math.floor(COLS / 2) - Math.ceil(shapeData.matrix[0].length / 2),
+                y: 0
+            };
+        }
+
+        /**
+         * เริ่มเกมใหม่
+         */
+        function startGame() {
+            sfx.init();
+            board = createEmptyBoard();
+            bag = [];
+            score = 0;
+            lines = 0;
+            level = 1;
+            dropInterval = 1000;
+            dropCounter = 0;
+            clearingRows = [];
+            particles = [];
+            floatingTexts = [];
+
+            isRunning = true;
+            isPaused = false;
+            isGameOver = false;
+
+            nextPiece = getNextFromBag();
+            spawnPiece();
+            updateUI();
+            hideOverlay();
+
+            document.getElementById('pauseTopBtn').disabled = false;
+            document.getElementById('pauseBtnLabel').textContent = 'หยุดชั่วคราว';
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            lastTime = performance.now();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function spawnPiece() {
+            currentPiece = nextPiece;
+            nextPiece = getNextFromBag();
+            drawNextPiece();
+
+            // ตรวจสอบว่าชนทันทีที่เกิดหรือไม่ (Game Over)
+            if (checkCollision(currentPiece.matrix, currentPiece.x, currentPiece.y)) {
+                triggerGameOver();
+            }
+        }
+
+        function triggerGameOver() {
+            isRunning = false;
+            isGameOver = true;
+            sfx.gameOver();
+            document.getElementById('pauseTopBtn').disabled = true;
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem(STORAGE_KEY, highScore.toString());
+            }
+            updateUI();
+
+            document.getElementById('finalScore').textContent = score.toLocaleString();
+            document.getElementById('finalHighScore').textContent = highScore.toLocaleString();
+            document.getElementById('finalLines').textContent = lines.toLocaleString();
+
+            showOverlay('gameOverView');
+        }
+
+        function togglePause() {
+            if (!isRunning || isGameOver) return;
+            isPaused = !isPaused;
+
+            if (isPaused) {
+                document.getElementById('pauseBtnLabel').textContent = 'เล่นต่อ';
+                showOverlay('pauseView');
+            } else {
+                document.getElementById('pauseBtnLabel').textContent = 'หยุดชั่วคราว';
+                hideOverlay();
+                lastTime = performance.now();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        /**
+         * ตรวจสอบการชนขอบกระดานหรือบล็อกที่วางอยู่แล้ว
+         */
+        function checkCollision(matrix, offsetX, offsetY) {
+            for (let r = 0; r < matrix.length; r++) {
+                for (let c = 0; c < matrix[r].length; c++) {
+                    if (!matrix[r][c]) continue;
+                    const newX = offsetX + c;
+                    const newY = offsetY + r;
+
+                    if (newX < 0 || newX >= COLS || newY >= ROWS) {
+                        return true;
+                    }
+                    if (newY >= 0 && board[newY][newX] !== null) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /**
+         * หมุนเมทริกซ์ตามเข็มนาฬิกา 90 องศา พร้อมระบบ Wall Kick
+         */
+        function rotateMatrix(matrix) {
+            const N = matrix.length;
+            const rotated = Array.from({ length: N }, () => Array(N).fill(0));
+            for (let r = 0; r < N; r++) {
+                for (let c = 0; c < N; c++) {
+                    rotated[c][N - 1 - r] = matrix[r][c];
+                }
+            }
+            return rotated;
+        }
+
+        function rotatePiece() {
+            if (!isRunning || isPaused || clearingRows.length > 0) return;
+            const rotated = rotateMatrix(currentPiece.matrix);
+            const kicks = [0, -1, 1, -2, 2]; // ขยับหลบกำแพงอัตโนมัติ
+
+            for (let kick of kicks) {
+                if (!checkCollision(rotated, currentPiece.x + kick, currentPiece.y)) {
+                    currentPiece.matrix = rotated;
+                    currentPiece.x += kick;
+                    sfx.rotate();
+                    draw();
+                    return;
+                }
+            }
+        }
+
+        function movePiece(dirX) {
+            if (!isRunning || isPaused || clearingRows.length > 0) return;
+            if (!checkCollision(currentPiece.matrix, currentPiece.x + dirX, currentPiece.y)) {
+                currentPiece.x += dirX;
+                sfx.move();
+                draw();
+            }
+        }
+
+        function softDrop() {
+            if (!isRunning || isPaused || clearingRows.length > 0) return;
+            if (!checkCollision(currentPiece.matrix, currentPiece.x, currentPiece.y + 1)) {
+                currentPiece.y++;
+                score += 1;
+                dropCounter = 0;
+                sfx.softDrop();
+                updateUI();
+                draw();
+            } else {
+                lockPiece();
+            }
+        }
+
+        function hardDrop() {
+            if (!isRunning || isPaused || clearingRows.length > 0) return;
+            let droppedCells = 0;
+            while (!checkCollision(currentPiece.matrix, currentPiece.x, currentPiece.y + 1)) {
+                currentPiece.y++;
+                droppedCells++;
+            }
+            score += droppedCells * 2;
+            sfx.hardDrop();
+            triggerShake();
+            lockPiece();
+            updateUI();
+            draw();
+        }
+
+        /**
+         * คำนวณตำแหน่ง Y ของเงาบล็อก (Ghost Piece)
+         */
+        function getGhostY() {
+            let ghostY = currentPiece.y;
+            while (!checkCollision(currentPiece.matrix, currentPiece.x, ghostY + 1)) {
+                ghostY++;
+            }
+            return ghostY;
+        }
+
+        /**
+         * ล็อกบล็อกลงบนกระดานและตรวจสอบแถวที่เต็ม
+         */
+        function lockPiece() {
+            const { matrix, x, y, color, glow } = currentPiece;
+            for (let r = 0; r < matrix.length; r++) {
+                for (let c = 0; c < matrix[r].length; c++) {
+                    if (matrix[r][c]) {
+                        const boardY = y + r;
+                        const boardX = x + c;
+                        if (boardY < 0) {
+                            triggerGameOver();
+                            return;
+                        }
+                        board[boardY][boardX] = { color, glow };
+                    }
+                }
+            }
+
+            // ตรวจหาแถวที่เต็ม
+            const fullRows = [];
+            for (let r = 0; r < ROWS; r++) {
+                if (board[r].every(cell => cell !== null)) {
+                    fullRows.push(r);
+                }
+            }
+
+            if (fullRows.length > 0) {
+                clearingRows = fullRows;
+                clearAnimTimer = CLEAR_ANIM_DURATION;
+                sfx.clearLine(fullRows.length);
+                triggerShake();
+                spawnRowParticles(fullRows);
+            } else {
+                sfx.lock();
+                spawnPiece();
+            }
+        }
+
+        /**
+         * ลบแถวที่เต็มออกหลังจากเล่นแอนิเมชันเสร็จ
+         */
+        function finalizeClearRows() {
+            const clearedCount = clearingRows.length;
+            // ลบจากล่างขึ้นบน
+            clearingRows.sort((a, b) => a - b);
+            for (let rowIndex of clearingRows) {
+                board.splice(rowIndex, 1);
+                board.unshift(Array(COLS).fill(null));
+            }
+
+            // คำนวณคะแนนตามมาตรฐาน Tetris
+            const linePoints = [0, 100, 300, 500, 800];
+            const earned = linePoints[clearedCount] * level;
+            score += earned;
+            lines += clearedCount;
+
+            // ข้อความลอยแจ้งคะแนนพิเศษ
+            const labels = ['', 'เยี่ยม!', 'ดับเบิล!', 'ทริปเปิล!', 'เตตริส! +'];
+            const textLabel = clearedCount === 4 ? `เตตริส! +${earned}` : `+${earned}`;
+            floatingTexts.push({
+                text: textLabel,
+                x: canvas.width / 2,
+                y: clearingRows[0] * blockSize,
+                alpha: 1,
+                color: clearedCount === 4 ? '#facc15' : '#38bdf8'
+            });
+
+            // เพิ่มเลเวลทุกๆ 10 แถว
+            const newLevel = Math.floor(lines / 10) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                // เพิ่มความเร็วตามเลเวล (เร็วสุดที่ 90ms)
+                dropInterval = Math.max(90, Math.round(1000 * Math.pow(0.84, level - 1)));
+                sfx.levelUp();
+            }
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem(STORAGE_KEY, highScore.toString());
+            }
+
+            clearingRows = [];
+            updateUI();
+            spawnPiece();
+        }
+
+        function spawnRowParticles(rows) {
+            rows.forEach(r => {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = board[r][c];
+                    const color = cell ? cell.color : '#38bdf8';
+                    for (let i = 0; i < 4; i++) {
+                        particles.push({
+                            x: (c + 0.5) * blockSize,
+                            y: (r + 0.5) * blockSize,
+                            vx: (Math.random() - 0.5) * 7,
+                            vy: (Math.random() - 0.8) * 6,
+                            size: Math.random() * 4 + 2,
+                            color: color,
+                            alpha: 1
+                        });
+                    }
+                }
+            });
+        }
+
+        function triggerShake() {
+            const container = document.getElementById('boardContainer');
+            container.classList.remove('shake');
+            void container.offsetWidth; // รีเซ็ตแอนิเมชัน
+            container.classList.add('shake');
+        }
+
+        /**
+         * ลูปหลักของเกม (Game Loop)
+         */
+        function gameLoop(time = 0) {
+            if (!isRunning || isPaused) return;
+
+            const deltaTime = time - lastTime;
+            lastTime = time;
+
+            if (clearingRows.length > 0) {
+                clearAnimTimer -= deltaTime;
+                if (clearAnimTimer <= 0) {
+                    finalizeClearRows();
+                }
+            } else {
+                dropCounter += deltaTime;
+                if (dropCounter > dropInterval) {
+                    if (!checkCollision(currentPiece.matrix, currentPiece.x, currentPiece.y + 1)) {
+                        currentPiece.y++;
+                    } else {
+                        lockPiece();
+                    }
+                    dropCounter = 0;
+                }
+            }
+
+            updateEffects();
+            draw();
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function updateEffects() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.25; // แรงโน้มถ่วง
+                p.alpha -= 0.03;
+                if (p.alpha <= 0) particles.splice(i, 1);
+            }
+
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y -= 1.2;
+                ft.alpha -= 0.02;
+                if (ft.alpha <= 0) floatingTexts.splice(i, 1);
+            }
+        }
+
+        /**
+         * วาดกราฟิกทั้งหมดบนกระดานหลัก
+         */
+        function draw() {
+            // พื้นหลังกระดาน
+            ctx.fillStyle = '#070b14';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // วาดเส้นตารางจางๆ
+            ctx.strokeStyle = 'rgba(51, 65, 85, 0.28)';
+            ctx.lineWidth = 1;
+            for (let c = 1; c < COLS; c++) {
+                ctx.beginPath();
+                ctx.moveTo(c * blockSize, 0);
+                ctx.lineTo(c * blockSize, canvas.height);
+                ctx.stroke();
+            }
+            for (let r = 1; r < ROWS; r++) {
+                ctx.beginPath();
+                ctx.moveTo(0, r * blockSize);
+                ctx.lineTo(canvas.width, r * blockSize);
+                ctx.stroke();
+            }
+
+            // วาดบล็อกที่วางค้างอยู่บนกระดาน
+            for (let r = 0; r < ROWS; r++) {
+                const isClearing = clearingRows.includes(r);
+                for (let c = 0; c < COLS; c++) {
+                    const cell = board[r][c];
+                    if (cell) {
+                        if (isClearing) {
+                            // เอฟเฟกต์กระพริบขาวเรืองแสงขณะทำลายแถว
+                            const flash = Math.sin((clearAnimTimer / CLEAR_ANIM_DURATION) * Math.PI);
+                            drawBlock(ctx, c, r, blockSize, '#ffffff', 'rgba(255,255,255,0.9)', flash);
+                        } else {
+                            drawBlock(ctx, c, r, blockSize, cell.color, cell.glow);
+                        }
+                    }
+                }
+            }
+
+            // วาดเงาบอกตำแหน่ง (Ghost Piece) และตัวบล็อกปัจจุบัน
+            if (currentPiece && clearingRows.length === 0) {
+                const ghostY = getGhostY();
+                drawMatrix(ctx, currentPiece.matrix, currentPiece.x, ghostY, blockSize, currentPiece.color, null, true);
+                drawMatrix(ctx, currentPiece.matrix, currentPiece.x, currentPiece.y, blockSize, currentPiece.color, currentPiece.glow, false);
+            }
+
+            // วาดอนุภาคแสง (Particles)
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 8;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                ctx.restore();
+            });
+
+            // วาดข้อความคะแนนลอย
+            floatingTexts.forEach(ft => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, ft.alpha);
+                ctx.font = `bold ${Math.max(14, Math.floor(blockSize * 0.65))}px Prompt, sans-serif`;
+                ctx.fillStyle = ft.color;
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 6;
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            });
+        }
+
+        function drawMatrix(context, matrix, offsetX, offsetY, size, color, glow, isGhost = false) {
+            for (let r = 0; r < matrix.length; r++) {
+                for (let c = 0; c < matrix[r].length; c++) {
+                    if (matrix[r][c]) {
+                        if (offsetY + r >= 0) {
+                            if (isGhost) {
+                                drawGhostBlock(context, offsetX + c, offsetY + r, size, color);
+                            } else {
+                                drawBlock(context, offsetX + c, offsetY + r, size, color, glow);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function drawBlock(context, gridX, gridY, size, color, glow, alpha = 1) {
+            const x = gridX * size;
+            const y = gridY * size;
+            const pad = 1.5;
+            const radius = Math.max(3, size * 0.16);
+
+            context.save();
+            context.globalAlpha = alpha;
+
+            if (glow) {
+                context.shadowColor = glow;
+                context.shadowBlur = 8;
+            }
+
+            // ตัวบล็อกหลัก
+            context.fillStyle = color;
+            roundRect(context, x + pad, y + pad, size - pad * 2, size - pad * 2, radius);
+            context.fill();
+
+            // ไฮไลต์แสงด้านบนซ้ายเพื่อมิติ 3 มิติแบบอาเขต
+            context.shadowBlur = 0;
+            context.fillStyle = 'rgba(255, 255, 255, 0.28)';
+            roundRect(context, x + pad + 1, y + pad + 1, size - pad * 2 - 2, (size - pad * 2) * 0.38, radius * 0.7);
+            context.fill();
+
+            // ขอบด้านใน
+            context.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+            context.lineWidth = 1;
+            roundRect(context, x + pad, y + pad, size - pad * 2, size - pad * 2, radius);
+            context.stroke();
+
+            context.restore();
+        }
+
+        function drawGhostBlock(context, gridX, gridY, size, color) {
+            const x = gridX * size;
+            const y = gridY * size;
+            const pad = 2;
+            const radius = Math.max(3, size * 0.16);
+
+            context.save();
+            context.strokeStyle = color;
+            context.globalAlpha = 0.38;
+            context.lineWidth = 1.8;
+            context.setLineDash([3, 2]);
+            roundRect(context, x + pad, y + pad, size - pad * 2, size - pad * 2, radius);
+            context.stroke();
+
+            context.fillStyle = color;
+            context.globalAlpha = 0.08;
+            context.fill();
+            context.restore();
+        }
+
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        /**
+         * วาดบล็อกตัวถัดไปทั้งบนหน้าจอเดสก์ท็อปและมือถือ
+         */
+        function drawNextPiece() {
+            renderPreview(nextCtx, nextCanvas, 20);
+            renderPreview(mobileNextCtx, mobileNextCanvas, 10);
+        }
+
+        function renderPreview(context, targetCanvas, previewBlockSize) {
+            context.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+            if (!nextPiece) return;
+
+            const m = nextPiece.matrix;
+            // หาขอบเขตจริงของบล็อกเพื่อจัดกึ่งกลางอย่างสวยงาม
+            let minR = m.length, maxR = 0, minC = m[0].length, maxC = 0;
+            for (let r = 0; r < m.length; r++) {
+                for (let c = 0; c < m[r].length; c++) {
+                    if (m[r][c]) {
+                        minR = Math.min(minR, r);
+                        maxR = Math.max(maxR, r);
+                        minC = Math.min(minC, c);
+                        maxC = Math.max(maxC, c);
+                    }
+                }
+            }
+
+            const pieceW = (maxC - minC + 1) * previewBlockSize;
+            const pieceH = (maxR - minR + 1) * previewBlockSize;
+            const startX = (targetCanvas.width - pieceW) / 2;
+            const startY = (targetCanvas.height - pieceH) / 2;
+
+            for (let r = minR; r <= maxR; r++) {
+                for (let c = minC; c <= maxC; c++) {
+                    if (m[r][c]) {
+                        const drawX = (startX / previewBlockSize) + (c - minC);
+                        const drawY = (startY / previewBlockSize) + (r - minR);
+                        drawBlock(context, drawX, drawY, previewBlockSize, nextPiece.color, nextPiece.glow);
+                    }
+                }
+            }
+        }
+
+        /**
+         * อัปเดตตัวเลขคะแนน เลเวล และแถวบน UI
+         */
+        function updateUI() {
+            const formattedScore = score.toLocaleString();
+            const formattedHigh = highScore.toLocaleString();
+
+            document.getElementById('desktopScore').textContent = formattedScore;
+            document.getElementById('desktopHighScore').textContent = formattedHigh;
+            document.getElementById('desktopLevel').textContent = level;
+            document.getElementById('desktopLines').textContent = lines;
+
+            document.getElementById('mobileScore').textContent = formattedScore;
+            document.getElementById('mobileHighScore').textContent = formattedHigh;
+            document.getElementById('mobileLevel').textContent = level;
+            document.getElementById('mobileLines').textContent = lines;
+        }
+
+        function showOverlay(viewId) {
+            const overlay = document.getElementById('overlayScreen');
+            overlay.classList.remove('hidden');
+            ['startView', 'pauseView', 'gameOverView'].forEach(id => {
+                const el = document.getElementById(id);
+                if (id === viewId) {
+                    el.classList.remove('hidden');
+                    el.classList.add('flex');
+                } else {
+                    el.classList.add('hidden');
+                    el.classList.remove('flex');
+                }
+            });
+        }
+
+        function hideOverlay() {
+            document.getElementById('overlayScreen').classList.add('hidden');
+        }
+
+        /**
+         * การควบคุมด้วยคีย์บอร์ด
+         */
+        document.addEventListener('keydown', (e) => {
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) {
+                e.preventDefault();
+            }
+
+            if (e.code === 'KeyP') {
+                togglePause();
+                return;
+            }
+
+            if (!isRunning || isPaused) return;
+
+            switch (e.code) {
+                case 'ArrowLeft':
+                    movePiece(-1);
+                    break;
+                case 'ArrowRight':
+                    movePiece(1);
+                    break;
+                case 'ArrowUp':
+                    rotatePiece();
+                    break;
+                case 'ArrowDown':
+                    softDrop();
+                    break;
+                case 'Space':
+                    hardDrop();
+                    break;
+            }
+        });
+
+        /**
+         * การควบคุมด้วยปุ่มบนหน้าจอ (รองรับการกดค้างสำหรับปุ่ม ซ้าย / ขวา / ลง)
+         */
+        function bindHoldButton(btnId, actionFn) {
+            const btn = document.getElementById(btnId);
+            let holdTimeout = null;
+            let holdInterval = null;
+
+            const startHold = (e) => {
+                e.preventDefault();
+                sfx.init();
+                btn.classList.add('pressed');
+                actionFn();
+
+                holdTimeout = setTimeout(() => {
+                    holdInterval = setInterval(actionFn, 75);
+                }, 180);
+            };
+
+            const stopHold = () => {
+                btn.classList.remove('pressed');
+                clearTimeout(holdTimeout);
+                clearInterval(holdInterval);
+            };
+
+            btn.addEventListener('touchstart', startHold, { passive: false });
+            btn.addEventListener('mousedown', startHold);
+
+            btn.addEventListener('touchend', stopHold);
+            btn.addEventListener('touchcancel', stopHold);
+            btn.addEventListener('mouseup', stopHold);
+            btn.addEventListener('mouseleave', stopHold);
+        }
+
+        function bindTapButton(btnId, actionFn) {
+            const btn = document.getElementById(btnId);
+            const trigger = (e) => {
+                e.preventDefault();
+                sfx.init();
+                btn.classList.add('pressed');
+                actionFn();
+                setTimeout(() => btn.classList.remove('pressed'), 100);
+            };
+            btn.addEventListener('touchstart', trigger, { passive: false });
+            btn.addEventListener('mousedown', trigger);
+        }
+
+        bindHoldButton('btnLeft', () => movePiece(-1));
+        bindHoldButton('btnRight', () => movePiece(1));
+        bindHoldButton('btnDown', () => softDrop());
+        bindTapButton('btnRotate', () => rotatePiece());
+        bindTapButton('btnDrop', () => hardDrop());
+
+        // ปุ่มจัดการสถานะเกมและเสียง
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+        document.getElementById('resumeBtn').addEventListener('click', togglePause);
+        document.getElementById('pauseTopBtn').addEventListener('click', togglePause);
+
+        document.getElementById('muteBtn').addEventListener('click', () => {
+            const isMuted = sfx.toggleMute();
+            document.getElementById('soundIconOn').classList.toggle('hidden', isMuted);
+            document.getElementById('soundIconOff').classList.toggle('hidden', !isMuted);
+            document.getElementById('soundText').textContent = isMuted ? 'เสียง: ปิด' : 'เสียง: เปิด';
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // เริ่มต้นขนาดกระดานและแสดงคะแนนสูงสุดที่บันทึกไว้
+        window.onload = () => {
+            updateUI();
+            resizeCanvas();
+        };
+    </script>
+</body>
+</html>
